@@ -213,7 +213,7 @@ mysql_connect(
 			));
 
 	// useful for verifying that the connection's secured
-	elog(INFO,
+	elog(LOG,
 		"Successfully connected to MySQL database %s "
 		"at server %s with cipher %s "
 		"(server version: %s, protocol version: %d) ",
