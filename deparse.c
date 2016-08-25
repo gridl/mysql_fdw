@@ -871,9 +871,11 @@ static void
 mysql_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 {
 	StringInfo     buf = context->buf;
+	StringInfoData local_buf;
 	HeapTuple      proctup;
 	Form_pg_proc   procform;
 	const char     *proname;
+	char           *pre_proname;
 	bool           first;
 	ListCell       *arg;
 
@@ -886,21 +888,62 @@ mysql_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 	procform = (Form_pg_proc) GETSTRUCT(proctup);
 
 	/* Translate PostgreSQL function into mysql function */
-	proname = mysql_replace_function(NameStr(procform->proname));
-
-	/* Deparse the function name ... */
-	appendStringInfo(buf, "%s(", proname);
-	
-	/* ... and all the arguments */
-	first = true;
-	foreach(arg, node->args)
+	pre_proname = NameStr(procform->proname);
+	/* First check functions, that there aren't MySQL equivalent */
+	if (strcmp(pre_proname, "date_trunc") == 0)
 	{
-		if (!first)
-			appendStringInfoString(buf, ", ");
+		char		unit[100];
+		/* Deparse function arguments */
+		initStringInfo(&local_buf);
+
+		/* Deparse unit argument */
+		context->buf = &local_buf;
+		arg = list_head(node->args);
 		deparseExpr((Expr *) lfirst(arg), context);
-		first = false;
+		snprintf(unit, sizeof(unit), "%s", local_buf.data);
+
+		/* Deparse source argument */
+		resetStringInfo(&local_buf);
+		arg = lnext(arg);
+		deparseExpr((Expr *) lfirst(arg), context);
+
+		if (strcmp(unit, "'day'") == 0)
+			appendStringInfo(buf, "date(%s)", local_buf.data);
+		else if (strcmp(unit, "'month'") == 0)
+			appendStringInfo(buf, "date_format(%s, '%%Y-%%m-01')", local_buf.data);
+		else if (strcmp(unit, "'year'") == 0)
+			appendStringInfo(buf, "date_format(%s, '%%Y-01-01')", local_buf.data);
+		else if (strcmp(unit, "'second'") == 0)
+			appendStringInfo(buf, "date_format(%s, '%%Y-%%m-%%d %%H:%%i:%%s')", local_buf.data);
+		else if (strcmp(unit, "'minute'") == 0)
+			appendStringInfo(buf, "date_format(%s, '%%Y-%%m-%%d %%H:%%i:00')", local_buf.data);
+		else if (strcmp(unit, "'hour'") == 0)
+			appendStringInfo(buf, "date_format(%s, '%%Y-%%m-%%d %%H:00:00')", local_buf.data);
+		else
+			elog(ERROR, "argument %s of date_trunc() is not supported", unit);
+
+		context->buf = buf;
+		pfree(local_buf.data);
 	}
-	appendStringInfoChar(buf, ')');
+	/* Else just replace function name */
+	else
+	{
+		proname = mysql_replace_function(pre_proname);
+
+		/* Deparse the function name ... */
+		appendStringInfo(buf, "%s(", proname);
+
+		/* ... and all the arguments */
+		first = true;
+		foreach(arg, node->args)
+		{
+			if (!first)
+				appendStringInfoString(buf, ", ");
+			deparseExpr((Expr *) lfirst(arg), context);
+			first = false;
+		}
+		appendStringInfoChar(buf, ')');
+	}
 	ReleaseSysCache(proctup);
 }
 

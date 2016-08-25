@@ -84,9 +84,36 @@ DELETE FROM numbers;
 DROP FUNCTION test_param_where();
 DROP FOREIGN TABLE numbers;
 
+-- Check timestamp functions
+CREATE FOREIGN TABLE times(id int, dt timestamp) SERVER mysql_svr OPTIONS(dbname 'testdb', table_name 'times');
+
+INSERT INTO times VALUES
+(1, '2015-01-10 11:24:35'),
+(2, '2015-01-10 15:24:35'),
+(3, '2015-01-10 17:24:35'),
+(4, '2015-01-10 19:24:35'),
+(5, '2015-01-10 21:24:35'),
+(6, '2015-01-14 21:24:35'),
+(7, '2015-01-14 22:24:35'),
+(8, '2015-02-14 02:24:35'),
+(9, '2015-02-14 05:24:35'),
+(10, '2015-02-14 09:24:35'),
+(11, '2016-02-14 09:24:35'),
+(12, '2016-03-14 09:24:35'),
+(13, '2016-03-16 09:24:35');
+
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM times WHERE dt >= ('2016-03-14'::timestamptz - interval '1 month');
+SELECT * FROM times WHERE dt >= ('2015-01-10 19:24:35'::timestamptz - interval '1 month') AND dt <= date_trunc('microseconds', now());
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM times WHERE dt >= ('2015-01-10 19:24:35'::timestamptz - interval '1 month') AND dt <= date_trunc('year', now());
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM times WHERE dt >= ('2015-01-10 19:24:35'::timestamptz - interval '1 month') AND dt <= date_trunc('month', now());
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM times WHERE dt >= ('2015-01-10 19:24:35'::timestamptz - interval '1 month') AND dt <= date_trunc('day', now());
+
+DELETE FROM times;
+
 DROP FOREIGN TABLE department;
 DROP FOREIGN TABLE employee;
 DROP FOREIGN TABLE empdata;
+DROP FOREIGN TABLE times;
 DROP USER MAPPING FOR postgres SERVER mysql_svr;
 DROP SERVER mysql_svr;
 DROP EXTENSION mysql_fdw CASCADE;
